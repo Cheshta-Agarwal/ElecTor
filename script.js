@@ -1,167 +1,290 @@
-// DOM Elements (unchanged)
-const chatContainer = document.querySelector(".chat-container");
-const chatMessages = document.getElementById("chat-messages");
-const userInput = document.getElementById("user-input");
-const sendButton = document.getElementById("send-button");
+// DOM Elements
+const container = document.querySelector(".container");
+const chatsContainer = document.querySelector(".chats-container");
+const promptForm = document.querySelector(".prompt-form");
+const promptInput = promptForm.querySelector(".prompt-input");
+const fileInput = promptForm.querySelector("#file-input");
+const fileUploadWrapper = promptForm.querySelector(".file-upload-wrapper");
+const themeToggleBtn = document.querySelector("#theme-toggle-btn");
 
-// API Setup (unchanged)
+// API Configuration
 const API_KEY = "AIzaSyBIPlZ_d2Wn93DWdjZ4iSlAW_DiE8k7sPU";
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
-// India-Specific Conversation History
-let conversationHistory = [
-    {
-        role: "user",
-        parts: [{
-            text: `You are VoterBot, an AI assistant for Indian voter registration. Follow this protocol:
-            
-            1. **Greeting**: "नमस्ते! I can help you with voter registration in India. Let's check your eligibility first."
-            
-            2. **Eligibility Checklist**:
-               - "Are you an Indian citizen?"
-               - "Will you be 18+ by January 1st of next year?"
-               - "Is your current residential address in India?"
-            
-            3. **Document Guidance**:
-               - "You'll need: Voter ID Form 6, proof of address (Aadhaar/utility bill), and age proof"
-               - State-specific requirements if known (e.g., local residency duration)
-            
-            4. **Process Options**:
-               - Online (NVSP portal) / Offline (BLO/ERO office)
-               - "Deadline: Typically 1 week before revision date"
-            
-            5. **FAQs**:
-               - "To check status: https://electoralsearch.eci.gov.in/"
-               - "For NRI voters: Special form 6A required"
-               - "EPIC card delivery takes 2-4 weeks"
-            
-            6. **Tone**:
-               - Official but helpful in both English/Hindi
-               - "For official confirmation, contact your local Electoral Registration Officer"
-            
-            Start by greeting in Hindi/English and asking the first eligibility question.`
-        }]
-    },
-    {
-        role: "model",
-        parts: [{
-            text: `नमस्ते! भारतीय मतदाता पंजीकरण सहायक 🌸\n\nLet's check your eligibility:\n\n1. क्या आप भारतीय नागरिक हैं? (Are you an Indian citizen?)\n2. क्या आपकी आयु अगले वर्ष की 1 जनवरी तक 18+ हो जाएगी? (Will you be 18+ by next January 1st?)\n3. क्या आप भारत में निवास करते हैं? (Do you reside in India?)\n\nYou can reply with yes/no to each.`
-        }]
-    }
-];
-
-let isBotResponding = false;
+// Application State
 let controller, typingInterval;
+const chatHistory = [];
+const userData = { message: "", file: {} };
+let currentLanguage = "en"; // Default to English
 
-// Function to create message elements
-const createMessageElement = (content, isUser) => {
-    const messageDiv = document.createElement("div");
-    messageDiv.className = isUser ? "user-message" : "bot-message";
-    messageDiv.innerHTML = `<p>${content}</p>`;
-    return messageDiv;
+// Language Content
+const LANGUAGE_CONTENT = {
+  en: {
+    greeting: "Welcome! How can I assist you with voter registration today?",
+    placeholder: "Ask me about voter registration...",
+    processing: "Processing your request...",
+    error: "Sorry, I couldn't process your request. Please try again."
+  },
+  hi: {
+    greeting: "स्वागत है! मैं आपकी मतदाता पंजीकरण में कैसे सहायता कर सकता हूँ?",
+    placeholder: "मुझसे मतदाता पंजीकरण के बारे में पूछें...",
+    processing: "आपका अनुरोध प्रसंस्करण किया जा रहा है...",
+    error: "क्षमा करें, मैं आपका अनुरोध संसाधित नहीं कर सका। कृपया पुनः प्रयास करें।"
+  }
 };
 
-// Scroll to the bottom of the chat
+// Initialize theme
+const isLightTheme = localStorage.getItem("themeColor") === "light_mode";
+document.body.classList.toggle("light-theme", isLightTheme);
+themeToggleBtn.textContent = isLightTheme ? "dark_mode" : "light_mode";
+
+// Helper Functions
+const createMessageElement = (content, ...classes) => {
+  const div = document.createElement("div");
+  div.classList.add("message", ...classes);
+  div.innerHTML = content;
+  return div;
+};
+
 const scrollToBottom = () => {
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+  container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
 };
 
-// Simulate typing effect
-const typingEffect = (text, element) => {
-    element.textContent = "";
-    let i = 0;
-    typingInterval = setInterval(() => {
-        if (i < text.length) {
-            element.textContent += text.charAt(i);
-            i++;
-            scrollToBottom();
-        } else {
-            clearInterval(typingInterval);
-            isBotResponding = false;
-        }
-    }, 20);
+const typingEffect = (text, textElement, botMsgDiv) => {
+  textElement.textContent = "";
+  let charIndex = 0;
+  typingInterval = setInterval(() => {
+    if (charIndex < text.length) {
+      textElement.textContent += text.charAt(charIndex++);
+      scrollToBottom();
+    } else {
+      clearInterval(typingInterval);
+      botMsgDiv.classList.remove("loading");
+      document.body.classList.remove("bot-responding");
+    }
+  }, 20);
 };
 
-// Generate API response
-const generateVoterResponse = async (userMessage) => {
-    isBotResponding = true;
+// Language Handling
+const setLanguage = (lang) => {
+    currentLanguage = lang;
+    promptInput.placeholder = LANGUAGE_CONTENT[lang].placeholder;
+    document.body.classList.add("chats-active");
+    
+    // Clear any existing chat history
+    chatHistory.length = 0;
+    
+    // Add system prompt to chat history
+    chatHistory.push({
+      role: "user",
+      parts: [{ text: `System: ${SYSTEM_PROMPT.en}` }] // Keep system prompt in English
+    });
+
+const welcomeMessage = LANGUAGE_CONTENT[lang].greeting;
+  setTimeout(() => {
+    const botMsgHTML = `<img class="avatar" src="gemini.svg" /> <p class="message-text">${welcomeMessage}</p>`;
+    const botMsgDiv = createMessageElement(botMsgHTML, "bot-message");
+    chatsContainer.appendChild(botMsgDiv);
+    scrollToBottom();
+    chatHistory.push({ 
+      role: "model", 
+      parts: [{ text: welcomeMessage }] 
+    });
+  }, 300);
+};
+
+// Event Listeners for Language Buttons
+document.querySelectorAll('.language-btn').forEach(button => {
+  button.addEventListener('click', (e) => {
+    setLanguage(e.target.dataset.lang);
+  });
+});
+
+// API Communication
+const generateResponse = async (botMsgDiv) => {
+    const textElement = botMsgDiv.querySelector(".message-text");
     controller = new AbortController();
     
-    // Add user message to history
-    conversationHistory.push({
-        role: "user",
-        parts: [{ text: userMessage }]
+    // Prepare message with context
+    const messageWithContext = `[Language: ${currentLanguage}, Location: India] ${userData.message}`;
+    
+    // Add to chat history
+    chatHistory.push({
+      role: "user",
+      parts: [{ text: messageWithContext }, ...(userData.file.data ? [{ inline_data: (({ fileName, isImage, ...rest }) => rest)(userData.file) }] : [])]
     });
 
     try {
-        // Create loading message
-        const loadingMsg = createMessageElement("Checking voter information...", false);
-        chatMessages.appendChild(loadingMsg);
-        scrollToBottom();
-
-        // API call
         const response = await fetch(API_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: conversationHistory }),
-            signal: controller.signal
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            contents: [
+              { role: "user", parts: [{ text: SYSTEM_PROMPT.en }] }, // System prompt
+              ...chatHistory.filter(msg => msg.role === "model" || 
+                (msg.role === "user" && !msg.parts[0].text.startsWith("System:")))
+            ]
+          }),
+          signal: controller.signal,
         });
-
-        if (!response.ok) throw new Error(await response.text());
         
         const data = await response.json();
-        const botResponse = data.candidates[0].content.parts[0].text;
-
-        // Remove loading and show actual response
-        chatMessages.removeChild(loadingMsg);
-        const botMessage = createMessageElement("", false);
-        chatMessages.appendChild(botMessage);
-        typingEffect(botResponse, botMessage.querySelector("p"));
-
-        // Add to conversation history
-        conversationHistory.push({
-            role: "model",
-            parts: [{ text: botResponse }]
+        if (!response.ok) throw new Error(data.error?.message || LANGUAGE_CONTENT[currentLanguage].error);
+        
+        // Process response to make it concise
+        let responseText = data.candidates[0].content.parts[0].text;
+        
+        // Check if this is an assertion that needs bullet points
+        const needsBulletPoints = userData.message.toLowerCase().includes("what") || 
+                                 userData.message.toLowerCase().includes("list") ||
+                                 userData.message.toLowerCase().includes("require");
+        
+        if (needsBulletPoints) {
+          // Extract first 3 points if available
+          const points = responseText.split('\n')
+            .filter(line => line.trim().startsWith('-') || line.trim().startsWith('•') || line.trim().match(/^\d+\./))
+            .slice(0, 3);
+          
+          if (points.length > 0) {
+            responseText = points.join('\n');
+          } else {
+            // If no bullet points found, limit to 3 sentences
+            const sentences = responseText.split(/[.!?]+/).filter(s => s.trim().length > 0);
+            if (sentences.length > 3) {
+              responseText = sentences.slice(0, 3).join('. ') + '.';
+            }
+          }
+        } else {
+          // For normal responses, limit to 3 sentences
+          const sentences = responseText.split(/[.!?]+/).filter(s => s.trim().length > 0);
+          if (sentences.length > 3) {
+            responseText = sentences.slice(0, 3).join('. ') + '.';
+          }
+        }
+        
+        // Add confirmation
+        responseText += currentLanguage === 'en' ? 
+          "\n\nDid this help?" : 
+          "\n\nक्या यह मददगार था?";
+        
+        typingEffect(responseText, textElement, botMsgDiv);
+        
+        // Add to history
+        chatHistory.push({ 
+          role: "model", 
+          parts: [{ text: responseText }] 
         });
+        
+      } catch (error) {
+        textElement.textContent = error.name === "AbortError" ? 
+          (currentLanguage === "en" ? "Response stopped." : "प्रतिक्रिया रोक दी गई।") : 
+          error.message;
+        textElement.style.color = "#d62939";
+        botMsgDiv.classList.remove("loading");
+        document.body.classList.remove("bot-responding");
+      }
+    };
 
-    } catch (error) {
-        console.error("API Error:", error);
-        const errorMsg = createMessageElement(
-            "⚠️ Please visit [vote.gov](https://www.vote.gov) for official registration help.", 
-            false
-        );
-        chatMessages.appendChild(errorMsg);
-        isBotResponding = false;
-    }
-};
+    const SYSTEM_PROMPT = {
+        en: `You are VoteAssist, a voter registration assistant for India. Follow these rules:
+        1. Provide only factual information
+        2. Keep responses under 3 sentences
+        3. For requirements/questions, list maximum 3 bullet points
+        4. Always confirm if the answer helped`,
+        hi: `आप वोटअसिस्ट हैं, भारत के लिए मतदाता पंजीकरण सहायक। नियम:
+        1. केवल तथ्यात्मक जानकारी दें
+        2. प्रतिक्रियाएँ 3 वाक्यों से अधिक नहीं
+        3. आवश्यकताओं/प्रश्नों के लिए अधिकतम 3 बुलेट पॉइंट्स
+        4. हमेशा पुष्टि करें कि क्या उत्तर सहायक था`
+      };
 
-// Handle user input
-const handleUserInput = () => {
-    const message = userInput.value.trim();
-    if (!message || isBotResponding) return;
-
-    // Add user message to UI
-    const userMsg = createMessageElement(message, true);
-    chatMessages.appendChild(userMsg);
-    userInput.value = "";
+// Form Submission
+const handleFormSubmit = (e) => {
+  e.preventDefault();
+  const userMessage = promptInput.value.trim();
+  if (!userMessage || document.body.classList.contains("bot-responding")) return;
+  
+  userData.message = userMessage;
+  promptInput.value = "";
+  document.body.classList.add("bot-responding");
+  fileUploadWrapper.classList.remove("file-attached", "img-attached", "active");
+  
+  // User message display
+  const userMsgHTML = `
+    <p class="message-text"></p>
+    ${userData.file.data ? (userData.file.isImage ? `<img src="data:${userData.file.mime_type};base64,${userData.file.data}" class="img-attachment" />` : `<p class="file-attachment"><span class="material-symbols-rounded">description</span>${userData.file.fileName}</p>`) : ""}
+  `;
+  
+  const userMsgDiv = createMessageElement(userMsgHTML, "user-message");
+  userMsgDiv.querySelector(".message-text").textContent = userMessage;
+  chatsContainer.appendChild(userMsgDiv);
+  scrollToBottom();
+  
+  // Bot response
+  setTimeout(() => {
+    const processingText = LANGUAGE_CONTENT[currentLanguage].processing;
+    const botMsgHTML = `<img class="avatar" src="gemini.svg" /> <p class="message-text">${processingText}</p>`;
+    const botMsgDiv = createMessageElement(botMsgHTML, "bot-message", "loading");
+    chatsContainer.appendChild(botMsgDiv);
     scrollToBottom();
-
-    // Generate bot response
-    generateVoterResponse(message);
+    generateResponse(botMsgDiv);
+  }, 600);
 };
 
-// Event Listeners
-sendButton.addEventListener("click", handleUserInput);
-userInput.addEventListener("keypress", (e) => {
-    if (e.key === "Enter") handleUserInput();
+// Existing Event Listeners (keep these the same)
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const isImage = file.type.startsWith("image/");
+  const reader = new FileReader();
+  reader.readAsDataURL(file);
+  reader.onload = (e) => {
+    fileInput.value = "";
+    const base64String = e.target.result.split(",")[1];
+    fileUploadWrapper.querySelector(".file-preview").src = e.target.result;
+    fileUploadWrapper.classList.add("active", isImage ? "img-attached" : "file-attached");
+    userData.file = { fileName: file.name, data: base64String, mime_type: file.type, isImage };
+  };
 });
 
-// Initial UI setup
-window.addEventListener("DOMContentLoaded", () => {
-    // Display the first bot message from conversationHistory
-    const initialMsg = createMessageElement(
-        conversationHistory[1].parts[0].text, 
-        false
-    );
-    chatMessages.appendChild(initialMsg);
+document.querySelector("#cancel-file-btn").addEventListener("click", () => {
+  userData.file = {};
+  fileUploadWrapper.classList.remove("file-attached", "img-attached", "active");
+});
+
+document.querySelector("#stop-response-btn").addEventListener("click", () => {
+  controller?.abort();
+  userData.file = {};
+  clearInterval(typingInterval);
+  const loadingMsg = chatsContainer.querySelector(".bot-message.loading");
+  if (loadingMsg) {
+    loadingMsg.classList.remove("loading");
+    loadingMsg.querySelector(".message-text").textContent = 
+      currentLanguage === "en" ? "Response stopped." : "प्रतिक्रिया रोक दी गई।";
+  }
+  document.body.classList.remove("bot-responding");
+});
+
+themeToggleBtn.addEventListener("click", () => {
+  const isLightTheme = document.body.classList.toggle("light-theme");
+  localStorage.setItem("themeColor", isLightTheme ? "light_mode" : "dark_mode");
+  themeToggleBtn.textContent = isLightTheme ? "dark_mode" : "light_mode";
+});
+
+document.querySelector("#delete-chats-btn").addEventListener("click", () => {
+  chatHistory.length = 0;
+  chatsContainer.innerHTML = "";
+  document.body.classList.remove("chats-active", "bot-responding");
+});
+
+promptForm.addEventListener("submit", handleFormSubmit);
+promptForm.querySelector("#add-file-btn").addEventListener("click", () => fileInput.click());
+
+// Mobile controls handling
+document.addEventListener("click", ({ target }) => {
+  const wrapper = document.querySelector(".prompt-wrapper");
+  const shouldHide = target.classList.contains("prompt-input") || 
+                    (wrapper.classList.contains("hide-controls") && 
+                    (target.id === "add-file-btn" || target.id === "stop-response-btn"));
+  wrapper.classList.toggle("hide-controls", shouldHide);
 });
