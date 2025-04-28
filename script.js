@@ -1,160 +1,167 @@
-const container = document.querySelector(".container");
-const chatsContainer = document.querySelector(".chats-container");
-const promptForm = document.querySelector(".prompt-form");
-const promptInput = promptForm.querySelector(".prompt-input");
-const fileInput = promptForm.querySelector("#file-input");
-const fileUploadWrapper = promptForm.querySelector(".file-upload-wrapper");
-const themeToggleBtn = document.querySelector("#theme-toggle-btn");
-// API Setup
+// DOM Elements (unchanged)
+const chatContainer = document.querySelector(".chat-container");
+const chatMessages = document.getElementById("chat-messages");
+const userInput = document.getElementById("user-input");
+const sendButton = document.getElementById("send-button");
+
+// API Setup (unchanged)
 const API_KEY = "AIzaSyBIPlZ_d2Wn93DWdjZ4iSlAW_DiE8k7sPU";
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyBIPlZ_d2Wn93DWdjZ4iSlAW_DiE8k7sPU`;
-let controller, typingInterval;
-const chatHistory = [];
-const userData = { message: "", file: {} };
-// Set initial theme from local storage
-const isLightTheme = localStorage.getItem("themeColor") === "light_mode";
-document.body.classList.toggle("light-theme", isLightTheme);
-themeToggleBtn.textContent = isLightTheme ? "dark_mode" : "light_mode";
-// Function to create message elements
-const createMessageElement = (content, ...classes) => {
-  const div = document.createElement("div");
-  div.classList.add("message", ...classes);
-  div.innerHTML = content;
-  return div;
-};
-// Scroll to the bottom of the container
-const scrollToBottom = () => container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-// Simulate typing effect for bot responses
-const typingEffect = (text, textElement, botMsgDiv) => {
-  textElement.textContent = "";
-  const words = text.split(" ");
-  let wordIndex = 0;
-  // Set an interval to type each word
-  typingInterval = setInterval(() => {
-    if (wordIndex < words.length) {
-      textElement.textContent += (wordIndex === 0 ? "" : " ") + words[wordIndex++];
-      scrollToBottom();
-    } else {
-      clearInterval(typingInterval);
-      botMsgDiv.classList.remove("loading");
-      document.body.classList.remove("bot-responding");
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+
+// India-Specific Conversation History
+let conversationHistory = [
+    {
+        role: "user",
+        parts: [{
+            text: `You are VoterBot, an AI assistant for Indian voter registration. Follow this protocol:
+            
+            1. **Greeting**: "नमस्ते! I can help you with voter registration in India. Let's check your eligibility first."
+            
+            2. **Eligibility Checklist**:
+               - "Are you an Indian citizen?"
+               - "Will you be 18+ by January 1st of next year?"
+               - "Is your current residential address in India?"
+            
+            3. **Document Guidance**:
+               - "You'll need: Voter ID Form 6, proof of address (Aadhaar/utility bill), and age proof"
+               - State-specific requirements if known (e.g., local residency duration)
+            
+            4. **Process Options**:
+               - Online (NVSP portal) / Offline (BLO/ERO office)
+               - "Deadline: Typically 1 week before revision date"
+            
+            5. **FAQs**:
+               - "To check status: https://electoralsearch.eci.gov.in/"
+               - "For NRI voters: Special form 6A required"
+               - "EPIC card delivery takes 2-4 weeks"
+            
+            6. **Tone**:
+               - Official but helpful in both English/Hindi
+               - "For official confirmation, contact your local Electoral Registration Officer"
+            
+            Start by greeting in Hindi/English and asking the first eligibility question.`
+        }]
+    },
+    {
+        role: "model",
+        parts: [{
+            text: `नमस्ते! भारतीय मतदाता पंजीकरण सहायक 🌸\n\nLet's check your eligibility:\n\n1. क्या आप भारतीय नागरिक हैं? (Are you an Indian citizen?)\n2. क्या आपकी आयु अगले वर्ष की 1 जनवरी तक 18+ हो जाएगी? (Will you be 18+ by next January 1st?)\n3. क्या आप भारत में निवास करते हैं? (Do you reside in India?)\n\nYou can reply with yes/no to each.`
+        }]
     }
-  }, 10); // 10 ms delay
+];
+
+let isBotResponding = false;
+let controller, typingInterval;
+
+// Function to create message elements
+const createMessageElement = (content, isUser) => {
+    const messageDiv = document.createElement("div");
+    messageDiv.className = isUser ? "user-message" : "bot-message";
+    messageDiv.innerHTML = `<p>${content}</p>`;
+    return messageDiv;
 };
-// Make the API call and generate the bot's response
-const generateResponse = async (botMsgDiv) => {
-  const textElement = botMsgDiv.querySelector(".message-text");
-  controller = new AbortController();
-  // Add user message and file data to the chat history
-  chatHistory.push({
-    role: "user",
-    parts: [{ text: userData.message }, ...(userData.file.data ? [{ inline_data: (({ fileName, isImage, ...rest }) => rest)(userData.file) }] : [])],
-  });
-  try {
-    // Send the chat history to the API to get a response
-    const response = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: chatHistory }),
-      signal: controller.signal,
+
+// Scroll to the bottom of the chat
+const scrollToBottom = () => {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+};
+
+// Simulate typing effect
+const typingEffect = (text, element) => {
+    element.textContent = "";
+    let i = 0;
+    typingInterval = setInterval(() => {
+        if (i < text.length) {
+            element.textContent += text.charAt(i);
+            i++;
+            scrollToBottom();
+        } else {
+            clearInterval(typingInterval);
+            isBotResponding = false;
+        }
+    }, 20);
+};
+
+// Generate API response
+const generateVoterResponse = async (userMessage) => {
+    isBotResponding = true;
+    controller = new AbortController();
+    
+    // Add user message to history
+    conversationHistory.push({
+        role: "user",
+        parts: [{ text: userMessage }]
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error.message);
-    // Process the response text and display with typing effect
-    const responseText = data.candidates[0].content.parts[0].text.replace(/\*\*([^*]+)\*\*/g, "$1").trim();
-    typingEffect(responseText, textElement, botMsgDiv);
-    chatHistory.push({ role: "model", parts: [{ text: responseText }] });
-  } catch (error) {
-    textElement.textContent = error.name === "AbortError" ? "Response generation stopped." : error.message;
-    textElement.style.color = "#d62939";
-    botMsgDiv.classList.remove("loading");
-    document.body.classList.remove("bot-responding");
-    scrollToBottom();
-  } finally {
-    userData.file = {};
-  }
+
+    try {
+        // Create loading message
+        const loadingMsg = createMessageElement("Checking voter information...", false);
+        chatMessages.appendChild(loadingMsg);
+        scrollToBottom();
+
+        // API call
+        const response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: conversationHistory }),
+            signal: controller.signal
+        });
+
+        if (!response.ok) throw new Error(await response.text());
+        
+        const data = await response.json();
+        const botResponse = data.candidates[0].content.parts[0].text;
+
+        // Remove loading and show actual response
+        chatMessages.removeChild(loadingMsg);
+        const botMessage = createMessageElement("", false);
+        chatMessages.appendChild(botMessage);
+        typingEffect(botResponse, botMessage.querySelector("p"));
+
+        // Add to conversation history
+        conversationHistory.push({
+            role: "model",
+            parts: [{ text: botResponse }]
+        });
+
+    } catch (error) {
+        console.error("API Error:", error);
+        const errorMsg = createMessageElement(
+            "⚠️ Please visit [vote.gov](https://www.vote.gov) for official registration help.", 
+            false
+        );
+        chatMessages.appendChild(errorMsg);
+        isBotResponding = false;
+    }
 };
-// Handle the form submission
-const handleFormSubmit = (e) => {
-  e.preventDefault();
-  const userMessage = promptInput.value.trim();
-  if (!userMessage || document.body.classList.contains("bot-responding")) return;
-  userData.message = userMessage;
-  promptInput.value = "";
-  document.body.classList.add("chats-active", "bot-responding");
-  fileUploadWrapper.classList.remove("file-attached", "img-attached", "active");
-  // Generate user message HTML with optional file attachment
-  const userMsgHTML = `
-    <p class="message-text"></p>
-    ${userData.file.data ? (userData.file.isImage ? `<img src="data:${userData.file.mime_type};base64,${userData.file.data}" class="img-attachment" />` : `<p class="file-attachment"><span class="material-symbols-rounded">description</span>${userData.file.fileName}</p>`) : ""}
-  `;
-  const userMsgDiv = createMessageElement(userMsgHTML, "user-message");
-  userMsgDiv.querySelector(".message-text").textContent = userData.message;
-  chatsContainer.appendChild(userMsgDiv);
-  scrollToBottom();
-  setTimeout(() => {
-    // Generate bot message HTML and add in the chat container
-    const botMsgHTML = `<img class="avatar" src="gemini.svg" /> <p class="message-text">Just a sec...</p>`;
-    const botMsgDiv = createMessageElement(botMsgHTML, "bot-message", "loading");
-    chatsContainer.appendChild(botMsgDiv);
+
+// Handle user input
+const handleUserInput = () => {
+    const message = userInput.value.trim();
+    if (!message || isBotResponding) return;
+
+    // Add user message to UI
+    const userMsg = createMessageElement(message, true);
+    chatMessages.appendChild(userMsg);
+    userInput.value = "";
     scrollToBottom();
-    generateResponse(botMsgDiv);
-  }, 600); // 600 ms delay
+
+    // Generate bot response
+    generateVoterResponse(message);
 };
-// Handle file input change (file upload)
-fileInput.addEventListener("change", () => {
-  const file = fileInput.files[0];
-  if (!file) return;
-  const isImage = file.type.startsWith("image/");
-  const reader = new FileReader();
-  reader.readAsDataURL(file);
-  reader.onload = (e) => {
-    fileInput.value = "";
-    const base64String = e.target.result.split(",")[1];
-    fileUploadWrapper.querySelector(".file-preview").src = e.target.result;
-    fileUploadWrapper.classList.add("active", isImage ? "img-attached" : "file-attached");
-    // Store file data in userData obj
-    userData.file = { fileName: file.name, data: base64String, mime_type: file.type, isImage };
-  };
+
+// Event Listeners
+sendButton.addEventListener("click", handleUserInput);
+userInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") handleUserInput();
 });
-// Cancel file upload
-document.querySelector("#cancel-file-btn").addEventListener("click", () => {
-  userData.file = {};
-  fileUploadWrapper.classList.remove("file-attached", "img-attached", "active");
+
+// Initial UI setup
+window.addEventListener("DOMContentLoaded", () => {
+    // Display the first bot message from conversationHistory
+    const initialMsg = createMessageElement(
+        conversationHistory[1].parts[0].text, 
+        false
+    );
+    chatMessages.appendChild(initialMsg);
 });
-// Stop Bot Response
-document.querySelector("#stop-response-btn").addEventListener("click", () => {
-  controller?.abort();
-  userData.file = {};
-  clearInterval(typingInterval);
-  chatsContainer.querySelector(".bot-message.loading").classList.remove("loading");
-  document.body.classList.remove("bot-responding");
-});
-// Toggle dark/light theme
-themeToggleBtn.addEventListener("click", () => {
-  const isLightTheme = document.body.classList.toggle("light-theme");
-  localStorage.setItem("themeColor", isLightTheme ? "light_mode" : "dark_mode");
-  themeToggleBtn.textContent = isLightTheme ? "dark_mode" : "light_mode";
-});
-// Delete all chats
-document.querySelector("#delete-chats-btn").addEventListener("click", () => {
-  chatHistory.length = 0;
-  chatsContainer.innerHTML = "";
-  document.body.classList.remove("chats-active", "bot-responding");
-});
-// Handle suggestions click
-document.querySelectorAll(".suggestions-item").forEach((suggestion) => {
-  suggestion.addEventListener("click", () => {
-    promptInput.value = suggestion.querySelector(".text").textContent;
-    promptForm.dispatchEvent(new Event("submit"));
-  });
-});
-// Show/hide controls for mobile on prompt input focus
-document.addEventListener("click", ({ target }) => {
-  const wrapper = document.querySelector(".prompt-wrapper");
-  const shouldHide = target.classList.contains("prompt-input") || (wrapper.classList.contains("hide-controls") && (target.id === "add-file-btn" || target.id === "stop-response-btn"));
-  wrapper.classList.toggle("hide-controls", shouldHide);
-});
-// Add event listeners for form submission and file input click
-promptForm.addEventListener("submit", handleFormSubmit);
-promptForm.querySelector("#add-file-btn").addEventListener("click", () => fileInput.click());
