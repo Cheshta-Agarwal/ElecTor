@@ -1,126 +1,291 @@
-/* General Styling */
+/* Import Google Font - Poppins */
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap");
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Poppins", sans-serif;
+}
+:root {
+  /* Dark theme colors */
+  --text-color: #edf3ff;
+  --subheading-color: #97a7ca;
+  --placeholder-color: #c3cdde;
+  --primary-color: #101623;
+  --secondary-color: #283045;
+  --secondary-hover-color: #333e58;
+  --scrollbar-color: #626a7f;
+}
+body.light-theme {
+  /* Light theme colors */
+  --text-color: #090c13;
+  --subheading-color: #7b8cae;
+  --placeholder-color: #606982;
+  --primary-color: #f3f7ff;
+  --secondary-color: #dce6f9;
+  --secondary-hover-color: #d2ddf2;
+  --scrollbar-color: #a2aac2;
+}
 body {
-    font-family: 'Roboto', sans-serif;
-    margin: 0;
-    padding: 0;
-    background-color: #f5f5f5;
-    color: #333;
+  color: var(--text-color);
+  background: var(--primary-color);
 }
-
 .container {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 20px;
+  overflow-y: auto;
+  padding: 32px 0 60px;
+  height: calc(100vh - 127px);
+  scrollbar-color: var(--scrollbar-color) transparent;
+}
+.container :where(.app-header, .suggestions, .message, .prompt-wrapper) {
+  position: relative;
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 20px;
+  max-width: 990px;
+}
+.container .app-header {
+  margin-top: 3vh;
+}
+.app-header .heading {
+  width: fit-content;
+  font-size: 3rem;
+  background: linear-gradient(to right, #1d7efd, #8f6fff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.app-header .sub-heading {
+  font-size: 2.6rem;
+  margin-top: -5px;
+  color: var(--subheading-color);
+}
+.container .greeting-container {
+  width: 100%;
+  margin-top: 9.5vh;
+  padding: 0 20px;
+  max-width: 990px;
+  margin-left: auto;
+  margin-right: auto;
+}
+body.chats-active .container :where(.app-header, .greeting-container) {
+  display: none;
+}
+.greeting-container .greeting-message {
+  cursor: default;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  align-items: center;
+  border-radius: 12px;
+  justify-content: space-between;
+  background: var(--secondary-color);
+  transition: 0.3s ease;
 }
 
-header {
-    text-align: center;
-    margin-bottom: 30px;
-    padding: 20px;
-    background-color: #1a365d;
-    color: white;
-    border-radius: 8px;
+.greeting-container .greeting-message .text {
+  font-size: 1.1rem;
+}
+.greeting-container .greeting-message .icon {
+  width: 45px;
+  height: 45px;
+  display: flex;
+  font-size: 1.4rem;
+  margin-top: 35px;
+  align-self: flex-end;
+  align-items: center;
+  border-radius: 50%;
+  justify-content: center;
+  color: #1d7efd;
+  background: var(--primary-color);
 }
 
-header h1 {
-    margin: 0;
-    font-size: 2.2em;
+.language-buttons {
+  display: flex;
+  gap: 15px;
+  margin-top: 20px;
+  width: 100%;
 }
 
-header p {
-    margin: 10px 0 0;
-    font-size: 1.1em;
-    opacity: 0.9;
+.language-btn {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: var(--secondary-hover-color);
+  color: var(--text-color);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
 }
 
-/* Chat Container */
-.chat-container {
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
+.language-btn:hover {
+  background: #1d7efd;
+  color: white;
 }
 
-.chat-header {
-    background: #2c5282;
-    color: white;
-    padding: 15px;
-    text-align: center;
+.container .chats-container {
+  display: flex;
+  gap: 20px;
+  flex-direction: column;
 }
-
-.chat-header h2 {
-    margin: 0;
-    font-size: 1.4em;
+.chats-container .message {
+  display: flex;
+  gap: 11px;
+  align-items: center;
 }
-
-.chat-messages {
-    height: 400px;
-    padding: 20px;
-    overflow-y: auto;
-    background: #f9f9f9;
+.chats-container .message .avatar {
+  width: 43px;
+  height: 43px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  border-radius: 50%;
+  padding: 6px;
+  margin-right: -7px;
+  background: var(--secondary-color);
+  border: 1px solid var(--secondary-hover-color);
 }
-
-.chat-messages p {
-    margin: 0;
-    line-height: 1.5;
+.chats-container .message.loading .avatar {
+  animation: rotate 3s linear infinite;
 }
-
-.user-message, .bot-message {
-    margin-bottom: 15px;
-    padding: 12px 15px;
-    border-radius: 8px;
-    max-width: 70%;
+@keyframes rotate {
+  100% {
+    transform: rotate(360deg);
+  }
 }
-
-.user-message {
-    background: #4299e1;
-    color: white;
-    margin-left: auto;
+.chats-container .message .message-text {
+  padding: 3px 16px;
+  word-wrap: break-word;
+  white-space: pre-line;
 }
-
-.bot-message {
-    background: #e2e8f0;
-    color: #2d3748;
-    margin-right: auto;
+.chats-container .bot-message {
+  margin: 9px auto;
 }
-
-/* Chat Input */
-.chat-input {
-    display: flex;
-    padding: 15px;
-    background: #edf2f7;
+.chats-container .user-message {
+  flex-direction: column;
+  align-items: flex-end;
 }
-
-.chat-input input {
-    flex: 1;
-    padding: 12px;
-    border: 1px solid #cbd5e0;
-    border-radius: 4px;
-    font-size: 1em;
-    outline: none;
+.chats-container .user-message .message-text {
+  padding: 12px 16px;
+  max-width: 75%;
+  background: var(--secondary-color);
+  border-radius: 13px 13px 3px 13px;
 }
-
-.chat-input button {
-    background: #2b6cb0;
-    color: white;
-    border: none;
-    padding: 12px 20px;
-    margin-left: 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: 500;
-    transition: background 0.2s;
+.chats-container .user-message .img-attachment {
+  margin-top: -7px;
+  width: 50%;
+  border-radius: 13px 3px 13px 13px;
 }
-
-.chat-input button:hover {
-    background: #2c5282;
+.chats-container .user-message .file-attachment {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 10px;
+  margin-top: -7px;
+  border-radius: 13px 3px 13px 13px;
+  background: var(--secondary-color);
 }
-
-/* Footer */
-footer {
-    text-align: center;
-    margin-top: 30px;
-    padding: 15px;
-    color: #718096;
-    font-size: 0.9em;
+.chats-container .user-message .file-attachment span {
+  color: #1d7efd;
+}
+.container .prompt-container {
+  position: fixed;
+  width: 100%;
+  left: 0;
+  bottom: 0;
+  padding: 16px 0;
+  background: var(--primary-color);
+}
+.prompt-container :where(.prompt-wrapper, .prompt-form, .prompt-actions) {
+  display: flex;
+  gap: 12px;
+  height: 56px;
+  align-items: center;
+}
+.prompt-container .prompt-form {
+  height: 100%;
+  width: 100%;
+  border-radius: 130px;
+  background: var(--secondary-color);
+}
+.prompt-form .prompt-input {
+  width: 100%;
+  height: 100%;
+  background: none;
+  outline: none;
+  border: none;
+  font-size: 1rem;
+  color: var(--text-color);
+  padding-left: 24px;
+}
+.prompt-form .prompt-input::placeholder {
+  color: var(--placeholder-color);
+}
+.prompt-wrapper button {
+  width: 56px;
+  height: 100%;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  font-size: 1.4rem;
+  border: none;
+  color: var(--text-color);
+  background: var(--secondary-color);
+  transition: 0.3s ease;
+}
+.prompt-wrapper :is(button:hover, #cancel-file-btn, .file-icon) {
+  background: var(--secondary-hover-color);
+}
+.prompt-form .prompt-actions {
+  gap: 5px;
+  margin-right: 7px;
+}
+.prompt-wrapper .prompt-form :where(.file-upload-wrapper, button, img) {
+  position: relative;
+  height: 45px;
+  width: 45px;
+}
+.prompt-form .prompt-actions #send-prompt-btn {
+  color: #fff;
+  display: none;
+  background: #1d7efd;
+}
+.prompt-form .prompt-input:valid~.prompt-actions #send-prompt-btn {
+  display: block;
+}
+.prompt-form #send-prompt-btn:hover {
+  background: #0264e3;
+}
+.prompt-form .file-upload-wrapper :where(button, img) {
+  display: none;
+  border-radius: 50%;
+  object-fit: cover;
+  position: absolute;
+}
+.prompt-form .file-upload-wrapper.active #add-file-btn {
+  display: none;
+}
+.prompt-form .file-upload-wrapper #add-file-btn,
+.prompt-form .file-upload-wrapper.active.img-attached img,
+.prompt-form .file-upload-wrapper.active.file-attached .file-icon,
+.prompt-form .file-upload-wrapper.active:hover #cancel-file-btn {
+  display: block;
+}
+.prompt-form :is(#stop-response-btn:hover, #cancel-file-btn) {
+  color: #d62939;
+}
+.prompt-wrapper .prompt-form .file-icon {
+  color: #1d7efd;
+}
+.prompt-form #stop-response-btn,
+body.bot-responding .prompt-form .file-upload-wrapper {
+  display: none;
+}
+body.bot-responding .prompt-form #stop-response-btn {
+  display: block;
+}
+.prompt-container .disclaimer-text {
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 16px 20px 0;
+  color: var(--placeholder-color);
 }
