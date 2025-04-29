@@ -6,6 +6,65 @@ const promptInput = promptForm.querySelector(".prompt-input");
 const fileInput = promptForm.querySelector("#file-input");
 const fileUploadWrapper = promptForm.querySelector(".file-upload-wrapper");
 const themeToggleBtn = document.querySelector("#theme-toggle-btn");
+const micButton = document.querySelector("#mic-button");
+let recognition;
+
+// Initialize Speech Recognition
+const initializeSpeechRecognition = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-IN';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onresult = (event) => {
+            const transcript = Array.from(event.results)
+                .map(result => result[0])
+                .map(result => result.transcript)
+                .join('');
+            promptInput.value = transcript;
+            handleFormSubmit(new Event('submit'));
+        };
+
+        recognition.onerror = (event) => {
+            console.error("Speech Recognition Error:", event.error);
+            const errorMsg = currentLanguage === 'en' ? 
+                "Speech recognition error. Please try again." : 
+                "ध्वनि पहचान में त्रुटि। कृपया पुनः प्रयास करें।";
+            alert(errorMsg);
+        };
+    } else {
+        const errorMsg = currentLanguage === 'en' ?
+            "Speech Recognition is not supported in your browser." :
+            "आपके ब्राउज़र में ध्वनि पहचान समर्थित नहीं है।";
+        alert(errorMsg);
+        if (micButton) micButton.disabled = true;
+    }
+};
+
+// Text-to-Speech Function
+const speakText = (text) => {
+    if (!text) return;
+    
+    const synth = window.speechSynthesis;
+    const utterance = new SpeechSynthesisUtterance();
+    
+    // Clean the text (remove any follow-up questions after newlines)
+    const cleanText = text.split('\n')[0];
+    utterance.text = cleanText;
+    utterance.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-US';
+    
+    // Wait for voices to be loaded
+    const voices = synth.getVoices();
+    if (voices.length > 0) {
+        const desiredLang = currentLanguage === 'hi' ? 'hi-IN' : 'en-IN';
+        const preferredVoice = voices.find(voice => voice.lang === desiredLang);
+        utterance.voice = preferredVoice || voices.find(voice => voice.lang.includes(currentLanguage === 'hi' ? 'hi' : 'en')) || voices[0];
+    }
+    
+    synth.speak(utterance);
+};
 
 // API Configuration
 const API_KEY = "AIzaSyBIPlZ_d2Wn93DWdjZ4iSlAW_DiE8k7sPU";
@@ -31,6 +90,36 @@ const LANGUAGE_CONTENT = {
     processing: "आपका अनुरोध प्रसंस्करण किया जा रहा है...",
     error: "क्षमा करें, मैं आपका अनुरोध संसाधित नहीं कर सका। कृपया पुनः प्रयास करें।"
   }
+};
+
+// Follow-up Questions
+const FOLLOW_UP_QUESTIONS = {
+    en: {
+      documents: "Would you like to know where to submit these documents?",
+      eligibility: "Should I explain the eligibility criteria in more detail?",
+      status: "Do you want to check your registration status?",
+      default: "Would you like to know about the registration process steps?"
+    },
+    hi: {
+      documents: "क्या आप जानना चाहेंगे कि ये दस्तावेज़ कहाँ जमा करें?",
+      eligibility: "क्या मैं पात्रता मानदंड के बारे में अधिक विवरण दूँ?",
+      status: "क्या आप अपना पंजीकरण स्थिति जांचना चाहेंगे?",
+      default: "क्या आप पंजीकरण प्रक्रिया के चरणों के बारे में जानना चाहेंगे?"
+    }
+};
+
+// System Prompt
+const SYSTEM_PROMPT = {
+    en: `You are VoteAssist, a voter registration assistant for India. Rules:
+    1. Provide only factual information
+    2. Keep responses under 3 sentences
+    3. For requirements/questions, list maximum 3 bullet points
+    4. Focus on Indian voter registration`,
+    hi: `आप वोटअसिस्ट हैं, भारत के लिए मतदाता पंजीकरण सहायक। नियम:
+    1. केवल तथ्यात्मक जानकारी दें
+    2. प्रतिक्रियाएँ 3 वाक्यों से अधिक नहीं
+    3. आवश्यकताओं/प्रश्नों के लिए अधिकतम 3 बुलेट पॉइंट्स
+    4. भारतीय मतदाता पंजीकरण पर ध्यान दें`
 };
 
 // Initialize theme
@@ -61,6 +150,8 @@ const typingEffect = (text, textElement, botMsgDiv) => {
       clearInterval(typingInterval);
       botMsgDiv.classList.remove("loading");
       document.body.classList.remove("bot-responding");
+      // Speak after typing completes
+      speakText(text);
     }
   }, 20);
 };
@@ -77,20 +168,21 @@ const setLanguage = (lang) => {
     // Add system prompt to chat history
     chatHistory.push({
       role: "user",
-      parts: [{ text: `System: ${SYSTEM_PROMPT.en}` }] // Keep system prompt in English
+      parts: [{ text: SYSTEM_PROMPT.en }]
     });
 
-const welcomeMessage = LANGUAGE_CONTENT[lang].greeting;
-  setTimeout(() => {
-    const botMsgHTML = `<img class="avatar" src="gemini.svg" /> <p class="message-text">${welcomeMessage}</p>`;
-    const botMsgDiv = createMessageElement(botMsgHTML, "bot-message");
-    chatsContainer.appendChild(botMsgDiv);
-    scrollToBottom();
-    chatHistory.push({ 
-      role: "model", 
-      parts: [{ text: welcomeMessage }] 
-    });
-  }, 300);
+    const welcomeMessage = LANGUAGE_CONTENT[lang].greeting;
+    setTimeout(() => {
+        const botMsgHTML = `<img class="avatar" src="gemini.svg" /> <p class="message-text">${welcomeMessage}</p>`;
+        const botMsgDiv = createMessageElement(botMsgHTML, "bot-message");
+        chatsContainer.appendChild(botMsgDiv);
+        scrollToBottom();
+        chatHistory.push({ 
+          role: "model", 
+          parts: [{ text: welcomeMessage }] 
+        });
+        speakText(welcomeMessage);
+    }, 300);
 };
 
 // Event Listeners for Language Buttons
@@ -105,10 +197,8 @@ const generateResponse = async (botMsgDiv) => {
     const textElement = botMsgDiv.querySelector(".message-text");
     controller = new AbortController();
     
-    // Prepare message with context
     const messageWithContext = `[Language: ${currentLanguage}, Location: India] ${userData.message}`;
     
-    // Add to chat history
     chatHistory.push({
       role: "user",
       parts: [{ text: messageWithContext }, ...(userData.file.data ? [{ inline_data: (({ fileName, isImage, ...rest }) => rest)(userData.file) }] : [])]
@@ -120,7 +210,7 @@ const generateResponse = async (botMsgDiv) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 
             contents: [
-              { role: "user", parts: [{ text: SYSTEM_PROMPT.en }] }, // System prompt
+              { role: "user", parts: [{ text: SYSTEM_PROMPT.en }] },
               ...chatHistory.filter(msg => msg.role === "model" || 
                 (msg.role === "user" && !msg.parts[0].text.startsWith("System:")))
             ]
@@ -131,72 +221,52 @@ const generateResponse = async (botMsgDiv) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error?.message || LANGUAGE_CONTENT[currentLanguage].error);
         
-        // Process response to make it concise
-        let responseText = data.candidates[0].content.parts[0].text;
+        let responseText = data.candidates[0].content.parts[0].text.replace(/\*\*([^*]+)\*\*/g, "$1").trim();
         
-        // Check if this is an assertion that needs bullet points
-        const needsBulletPoints = userData.message.toLowerCase().includes("what") || 
-                                 userData.message.toLowerCase().includes("list") ||
-                                 userData.message.toLowerCase().includes("require");
+        // Determine follow-up question
+        const userMessage = userData.message.toLowerCase();
+        let followUpKey = 'default';
         
-        if (needsBulletPoints) {
-          // Extract first 3 points if available
+        if (userMessage.includes('document') || userMessage.includes('proof') || userMessage.includes('id')) {
+          followUpKey = 'documents';
+        } else if (userMessage.includes('eligib') || userMessage.includes('qualif') || userMessage.includes('criteria')) {
+          followUpKey = 'eligibility';
+        } else if (userMessage.includes('status') || userMessage.includes('check') || userMessage.includes('verify')) {
+          followUpKey = 'status';
+        }
+        
+        const followUpQuestion = FOLLOW_UP_QUESTIONS[currentLanguage][followUpKey];
+        
+        // Format response
+        if (userMessage.includes("what") || userMessage.includes("list") || userMessage.includes("require")) {
           const points = responseText.split('\n')
             .filter(line => line.trim().startsWith('-') || line.trim().startsWith('•') || line.trim().match(/^\d+\./))
             .slice(0, 3);
           
-          if (points.length > 0) {
-            responseText = points.join('\n');
-          } else {
-            // If no bullet points found, limit to 3 sentences
-            const sentences = responseText.split(/[.!?]+/).filter(s => s.trim().length > 0);
-            if (sentences.length > 3) {
-              responseText = sentences.slice(0, 3).join('. ') + '.';
-            }
-          }
+          responseText = points.length > 0 ? points.join('\n') : responseText;
         } else {
-          // For normal responses, limit to 3 sentences
           const sentences = responseText.split(/[.!?]+/).filter(s => s.trim().length > 0);
-          if (sentences.length > 3) {
-            responseText = sentences.slice(0, 3).join('. ') + '.';
-          }
+          responseText = sentences.length > 3 ? sentences.slice(0, 3).join('. ') + '.' : responseText;
         }
         
-        // Add confirmation
-        responseText += currentLanguage === 'en' ? 
-          "\n\nDid this help?" : 
-          "\n\nक्या यह मददगार था?";
+        responseText += `\n\n${followUpQuestion}`;
         
         typingEffect(responseText, textElement, botMsgDiv);
         
-        // Add to history
         chatHistory.push({ 
           role: "model", 
           parts: [{ text: responseText }] 
         });
         
-      } catch (error) {
+    } catch (error) {
         textElement.textContent = error.name === "AbortError" ? 
           (currentLanguage === "en" ? "Response stopped." : "प्रतिक्रिया रोक दी गई।") : 
           error.message;
         textElement.style.color = "#d62939";
         botMsgDiv.classList.remove("loading");
         document.body.classList.remove("bot-responding");
-      }
-    };
-
-    const SYSTEM_PROMPT = {
-        en: `You are VoteAssist, a voter registration assistant for India. Follow these rules:
-        1. Provide only factual information
-        2. Keep responses under 3 sentences
-        3. For requirements/questions, list maximum 3 bullet points
-        4. Always confirm if the answer helped`,
-        hi: `आप वोटअसिस्ट हैं, भारत के लिए मतदाता पंजीकरण सहायक। नियम:
-        1. केवल तथ्यात्मक जानकारी दें
-        2. प्रतिक्रियाएँ 3 वाक्यों से अधिक नहीं
-        3. आवश्यकताओं/प्रश्नों के लिए अधिकतम 3 बुलेट पॉइंट्स
-        4. हमेशा पुष्टि करें कि क्या उत्तर सहायक था`
-      };
+    }
+};
 
 // Form Submission
 const handleFormSubmit = (e) => {
@@ -209,7 +279,6 @@ const handleFormSubmit = (e) => {
   document.body.classList.add("bot-responding");
   fileUploadWrapper.classList.remove("file-attached", "img-attached", "active");
   
-  // User message display
   const userMsgHTML = `
     <p class="message-text"></p>
     ${userData.file.data ? (userData.file.isImage ? `<img src="data:${userData.file.mime_type};base64,${userData.file.data}" class="img-attachment" />` : `<p class="file-attachment"><span class="material-symbols-rounded">description</span>${userData.file.fileName}</p>`) : ""}
@@ -220,7 +289,6 @@ const handleFormSubmit = (e) => {
   chatsContainer.appendChild(userMsgDiv);
   scrollToBottom();
   
-  // Bot response
   setTimeout(() => {
     const processingText = LANGUAGE_CONTENT[currentLanguage].processing;
     const botMsgHTML = `<img class="avatar" src="gemini.svg" /> <p class="message-text">${processingText}</p>`;
@@ -231,7 +299,7 @@ const handleFormSubmit = (e) => {
   }, 600);
 };
 
-// Existing Event Listeners (keep these the same)
+// File Input Handling
 fileInput.addEventListener("change", () => {
   const file = fileInput.files[0];
   if (!file) return;
@@ -247,6 +315,7 @@ fileInput.addEventListener("change", () => {
   };
 });
 
+// Other Event Listeners
 document.querySelector("#cancel-file-btn").addEventListener("click", () => {
   userData.file = {};
   fileUploadWrapper.classList.remove("file-attached", "img-attached", "active");
@@ -271,6 +340,15 @@ themeToggleBtn.addEventListener("click", () => {
   themeToggleBtn.textContent = isLightTheme ? "dark_mode" : "light_mode";
 });
 
+if (micButton) {
+    micButton.addEventListener("click", () => {
+        if (recognition) {
+            recognition.lang = currentLanguage === 'hi' ? 'hi-IN' : 'en-IN';
+            recognition.start();
+        }
+    });
+}
+
 document.querySelector("#delete-chats-btn").addEventListener("click", () => {
   chatHistory.length = 0;
   chatsContainer.innerHTML = "";
@@ -287,4 +365,12 @@ document.addEventListener("click", ({ target }) => {
                     (wrapper.classList.contains("hide-controls") && 
                     (target.id === "add-file-btn" || target.id === "stop-response-btn"));
   wrapper.classList.toggle("hide-controls", shouldHide);
+});
+
+// Initialize on load
+window.addEventListener('load', () => {
+    initializeSpeechRecognition();
+    if (window.speechSynthesis) {
+        window.speechSynthesis.onvoiceschanged = function() {};
+    }
 });
